@@ -237,7 +237,7 @@ def main() -> None:
 
         return False
 
-    def is_dialogue_should_esc():
+    def dialogue_should_esc():
         # Top left Book is yellow and top right X icon pixel is gray
         if pixelMatchesColor(READABLE_CONTENT_X, READABLE_CONTENT_Y, (164, 146, 111), tolerance=5) or \
            pixelMatchesColor(READABLE_CONTENT_BOTTOM_X, READABLE_CONTENT_BOTTOM_Y, (79, 74, 65), tolerance=5):
@@ -267,7 +267,7 @@ def main() -> None:
         if is_genshinimpact_active() and (is_dialogue_playing() or is_dialogue_option_available()):
             press('f')
 
-        if is_genshinimpact_active() and is_dialogue_should_esc() and random_interval() < 0.12:
+        if is_genshinimpact_active() and dialogue_should_esc() and random_interval() < 0.12:
             press('esc')
 
 
