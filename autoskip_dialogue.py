@@ -2,11 +2,10 @@ import os
 from random import randint, uniform
 from threading import Thread
 from typing import Tuple, Union
-from time import perf_counter, sleep
+from time import sleep
 from win32api import GetSystemMetrics
 
-from pyautogui import click, getActiveWindowTitle, pixel
-from pynput.mouse import Controller
+from pyautogui import getActiveWindowTitle, pixel, pixelMatchesColor, press
 from pynput.keyboard import Key, KeyCode, Listener
 from dotenv import find_dotenv, load_dotenv, set_key
 
@@ -106,43 +105,68 @@ def get_position_left(hdpos_x: int, doublehdpos_x: int, SCREEN_WIDTH: int) -> in
     return position
 
 
-# Dimensions of bottom dialogue option
-if SCREEN_WIDTH > 1920 and float(int(SCREEN_HEIGHT)/int(SCREEN_WIDTH)) != float(0.5625):
-    BOTTOM_DIALOGUE_MIN_X = get_position_right(1300, 2734, SCREEN_WIDTH, 0.031)
-    BOTTOM_DIALOGUE_MAX_X = get_position_right(1700, 3303, SCREEN_WIDTH, -0.015)
-else:
-    BOTTOM_DIALOGUE_MIN_X = width_adjust(1300)
-    BOTTOM_DIALOGUE_MAX_X = width_adjust(1700)
-BOTTOM_DIALOGUE_MIN_Y = height_adjust(790)
-BOTTOM_DIALOGUE_MAX_Y = height_adjust(800)
-
-# Pixel coordinates for white part of the autoplay button
+# Top left white part of the "auto" or "playing" button
 if SCREEN_WIDTH > 1920 and float(int(SCREEN_HEIGHT)/int(SCREEN_WIDTH)) != float(0.5625):
     # I will leave the flexible position here, but I found out that it won't be greater than 230.
     # So it might have to be removed if someone can test with a 1440p screen.
-    PLAYING_ICON_X = get_position_left(84, 230, SCREEN_WIDTH)  # 230 at 3840
+    PLAYING_ICON_X = get_position_left(56, 230, SCREEN_WIDTH)
     if PLAYING_ICON_X > 231:
         PLAYING_ICON_X = 230
-    PLAYING_ICON_Y = height_adjust(46)
 else:
-    PLAYING_ICON_X = width_adjust(84)
-    PLAYING_ICON_Y = height_adjust(46)
+    PLAYING_ICON_X = width_adjust(56)
+PLAYING_ICON_Y = height_adjust(47)
+
 
 # Pixel coordinates for white part of the speech bubble in bottom dialogue option
 if SCREEN_WIDTH > 1920 and float(int(SCREEN_HEIGHT)/int(SCREEN_WIDTH)) != float(0.5625):
     DIALOGUE_ICON_X = get_position_right(1301, 2770, SCREEN_WIDTH, 0.02)
-    DIALOGUE_ICON_LOWER_Y = height_adjust(810)
-    DIALOGUE_ICON_HIGHER_Y = height_adjust(792)
 else:
     DIALOGUE_ICON_X = width_adjust(1301)
-    DIALOGUE_ICON_LOWER_Y = height_adjust(808)
-    DIALOGUE_ICON_HIGHER_Y = height_adjust(790)
+DIALOGUE_ICON_LOWER_Y = height_adjust(808)
+DIALOGUE_ICON_HIGHER_Y = height_adjust(790)
+
+
+# TODO: add `get_position_left()` / `get_position_right()` for wider res - 16:9 user here, so..
+# TODO: resolve random "F" and "ESC" spam in the inventory and/or overworld - just disable it after you're done
+
+
+# Top left "logs" button
+LOGS_ICON_X = width_adjust(241)
+LOGS_ICON_Y = height_adjust(47)
+
+# Top left "hide-ui" button
+HIDEUI_ICON_X = width_adjust(324)
+HIDEUI_ICON_Y = height_adjust(52)
+
+# "Readable content" top left hamburger icon
+READABLE_CONTENT_X = width_adjust(80)
+READABLE_CONTENT_Y = height_adjust(40)
+
+# "Readable content" bottom decor
+READABLE_CONTENT_BOTTOM_X = width_adjust(956)
+READABLE_CONTENT_BOTTOM_Y = height_adjust(1050)
+
+# Top left "Back" icon
+TOP_LEFT_BACK_ICON_X = width_adjust(45)
+TOP_LEFT_BACK_ICON_Y = height_adjust(45)
+
+# Top right "X" icon
+TOP_RIGHT_CLOSE_ICON_X = width_adjust(1843)
+TOP_RIGHT_CLOSE_ICON_Y = height_adjust(48)
+
+# "Click to continue" during black-screen white-text
+CLICK_TO_CONTINUE_X = width_adjust(856)
+CLICK_TO_CONTINUE_Y = height_adjust(968)
+
+# Black screen
+BLACK_SCREEN_LEFT_X = width_adjust(300)
+BLACK_SCREEN_RIGHT_X = width_adjust(1700)
+BLACK_SCREEN_Y = height_adjust(727)
 
 # Pixel coordinates near middle of the screen known to be white while the game is loading
 # This should work fine on most screen sizes I think - @withoutface
 LOADING_SCREEN_X = width_adjust(1200)
 LOADING_SCREEN_Y = height_adjust(700)
-
 
 def random_interval() -> float:
     """
@@ -151,18 +175,6 @@ def random_interval() -> float:
     """
 
     return uniform(0.18, 0.2) if randint(1, 6) == 6 else uniform(0.12, 0.18)
-
-
-def random_cursor_position() -> Tuple[int, int]:
-    """
-    The cursor is moved to a random position in the bottom dialogue option.
-    :return: A random (x, y) in range of the bottom dialogue option.
-    """
-
-    x = randint(BOTTOM_DIALOGUE_MIN_X, BOTTOM_DIALOGUE_MAX_X)
-    y = randint(BOTTOM_DIALOGUE_MIN_Y, BOTTOM_DIALOGUE_MAX_Y)
-
-    return x, y
 
 
 def on_press(key: (Union[Key, KeyCode, None])) -> None:
@@ -196,26 +208,47 @@ def main() -> None:
         return getActiveWindowTitle() == "Genshin Impact"
 
     def is_dialogue_playing():
-        return pixel(PLAYING_ICON_X, PLAYING_ICON_Y) == (236, 229, 216)
+        return pixelMatchesColor(PLAYING_ICON_X, PLAYING_ICON_Y, (236, 229, 216))
 
     def is_dialogue_option_available():
         # Confirm loading screen is not white
-        if pixel(LOADING_SCREEN_X, LOADING_SCREEN_Y) == (255, 255, 255):
+        if pixelMatchesColor(LOADING_SCREEN_X, LOADING_SCREEN_Y, (255, 255, 255)):
+            return False
+            
+        if pixelMatchesColor(TOP_LEFT_BACK_ICON_X, TOP_LEFT_BACK_ICON_Y, (59, 66, 85), tolerance=5):
             return False
 
-        # Check if lower dialogue icon pixel is white
-        if pixel(DIALOGUE_ICON_X, DIALOGUE_ICON_LOWER_Y) == (255, 255, 255):
-            return True
+        if pixelMatchesColor(TOP_RIGHT_CLOSE_ICON_X, TOP_RIGHT_CLOSE_ICON_Y, (59, 66, 85), tolerance=5):
+            return False
 
         # Check if higher dialogue icon pixel is white
-        if pixel(DIALOGUE_ICON_X, DIALOGUE_ICON_HIGHER_Y) == (255, 255, 255):
+        if pixelMatchesColor(DIALOGUE_ICON_X, DIALOGUE_ICON_HIGHER_Y, (255, 255, 255), tolerance=5):
+            return True
+
+        # Check if lower dialogue icon pixel is white
+        if pixelMatchesColor(DIALOGUE_ICON_X, DIALOGUE_ICON_LOWER_Y, (255, 255, 255), tolerance=5):
+            return True
+
+        # Check if "Click to continue" pixel is yellow
+        if pixelMatchesColor(CLICK_TO_CONTINUE_X, CLICK_TO_CONTINUE_Y, (255, 195, 0), tolerance=5) and \
+            pixelMatchesColor(BLACK_SCREEN_LEFT_X, BLACK_SCREEN_Y, (0, 0, 0)) and \
+            pixelMatchesColor(BLACK_SCREEN_RIGHT_X, BLACK_SCREEN_Y, (0, 0, 0)):
             return True
 
         return False
 
+    def is_dialogue_should_esc():
+        # Top left Book is yellow and top right X icon pixel is gray
+        if pixelMatchesColor(READABLE_CONTENT_X, READABLE_CONTENT_Y, (164, 146, 111), tolerance=5) or \
+           pixelMatchesColor(READABLE_CONTENT_BOTTOM_X, READABLE_CONTENT_BOTTOM_Y, (79, 74, 65), tolerance=5):
+
+            if pixelMatchesColor(TOP_RIGHT_CLOSE_ICON_X, TOP_RIGHT_CLOSE_ICON_Y, (161, 144, 109), tolerance=5) or \
+               pixelMatchesColor(TOP_RIGHT_CLOSE_ICON_X, TOP_RIGHT_CLOSE_ICON_Y, (211, 188, 142)):
+                return True
+
+        return False
+
     main.status = 'pause'
-    last_reposition = 0.0
-    time_between_repositions = random_interval() * 40
 
     print('-------------\n'
           'F8 to start\n'
@@ -232,16 +265,13 @@ def main() -> None:
             break
 
         if is_genshinimpact_active() and (is_dialogue_playing() or is_dialogue_option_available()):
-            if perf_counter() - last_reposition > time_between_repositions:
-                last_reposition = perf_counter()
-                time_between_repositions = random_interval() * 40
-                mouse.position = random_cursor_position()
+            press('f')
 
-            click()
+        if is_genshinimpact_active() and is_dialogue_should_esc() and random_interval() < 0.12:
+            press('esc')
 
 
 if __name__ == "__main__":
-    mouse = Controller()
     Thread(target=main).start()
 
     with Listener(on_press=on_press) as listener:
