@@ -78,6 +78,9 @@ fabric.properties
 
 # .env file holding user's screen resolution
 .env
+.venv
+# .env-example for reference only
+# ^ Users should copy this to .env
 
 # Links
 *.lnk

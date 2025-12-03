@@ -5,12 +5,19 @@ from time import perf_counter, sleep
 from typing import Union
 from win32api import GetSystemMetrics  # type: ignore[import-untyped]
 
-from pyautogui import getActiveWindowTitle, press, pixel  # type: ignore[import-untyped]
+from pyautogui import getActiveWindowTitle, press, pixelMatchesColor  # type: ignore[import-untyped]
 from pynput.keyboard import Key, KeyCode, Listener  # type: ignore[import-untyped]
 from dotenv import find_dotenv, load_dotenv, set_key  # type: ignore[import-not-found]
 
 # Initial setup
 os.system("cls")
+
+# Create .env from .env-example if .env doesn't exist
+if not os.path.exists(".env") and os.path.exists(".env-example"):
+    import shutil
+    shutil.copy(".env-example", ".env")
+    print("  Created .env from .env-example\n")
+
 load_dotenv()
 print("\n" + "=" * 60)
 print("  GENSHIN IMPACT - DIALOGUE AUTO-SKIPPER")
@@ -87,28 +94,60 @@ def get_position_left(hdpos_x: int, doublehdpos_x: int, SCREEN_WIDTH: int) -> in
 
 
 # Pixel coordinates for white part of the autoplay button
-if SCREEN_WIDTH > 1920 and float(int(SCREEN_HEIGHT) / int(SCREEN_WIDTH)) != float(
-    0.5625
-):
-    PLAYING_ICON_X = get_position_left(84, 230, SCREEN_WIDTH)  # 230 at 3840
-    if PLAYING_ICON_X > 231:
+if SCREEN_WIDTH > 1920 and float(int(SCREEN_HEIGHT) / int(SCREEN_WIDTH)) != float(0.5625):
+    PLAYING_ICON_X = get_position_left(70, 230, SCREEN_WIDTH) # 230 at 3840
+    if PLAYING_ICON_X > 230:
         PLAYING_ICON_X = 230
     PLAYING_ICON_Y = height_adjust(46)
 else:
-    PLAYING_ICON_X = width_adjust(84)
-    PLAYING_ICON_Y = height_adjust(46)
+    PLAYING_ICON_X = width_adjust(70)
+PLAYING_ICON_Y = height_adjust(37)
 
 # Pixel coordinates for white part of the speech bubble in bottom dialogue option
-if SCREEN_WIDTH > 1920 and float(int(SCREEN_HEIGHT) / int(SCREEN_WIDTH)) != float(
-    0.5625
-):
+if SCREEN_WIDTH > 1920 and float(int(SCREEN_HEIGHT) / int(SCREEN_WIDTH)) != float(0.5625):
     DIALOGUE_ICON_X = get_position_right(1301, 2770, SCREEN_WIDTH, 0.02)
     DIALOGUE_ICON_LOWER_Y = height_adjust(810)
     DIALOGUE_ICON_HIGHER_Y = height_adjust(792)
 else:
     DIALOGUE_ICON_X = width_adjust(1301)
-    DIALOGUE_ICON_LOWER_Y = height_adjust(808)
-    DIALOGUE_ICON_HIGHER_Y = height_adjust(790)
+DIALOGUE_ICON_LOWER_Y = height_adjust(808)
+DIALOGUE_ICON_HIGHER_Y = height_adjust(790)
+
+# Top left "logs" button
+LOGS_ICON_X = width_adjust(241)
+LOGS_ICON_Y = height_adjust(47)
+
+# Top left "hide-ui" button
+HIDEUI_ICON_X = width_adjust(324)
+HIDEUI_ICON_Y = height_adjust(52)
+
+# "Readable content" top left hamburger icon
+READABLE_CONTENT_X = width_adjust(80)
+READABLE_CONTENT_Y = height_adjust(40)
+
+# "Readable content" bottom decor
+READABLE_CONTENT_BOTTOM_X = width_adjust(956)
+READABLE_CONTENT_BOTTOM_Y = height_adjust(1050)
+
+# Top left "Back" icon
+TOP_LEFT_BACK_ICON_X = width_adjust(45)
+TOP_LEFT_BACK_ICON_Y = height_adjust(45)
+
+# Top right "X" icon
+TOP_RIGHT_CLOSE_ICON_X = width_adjust(1843)
+TOP_RIGHT_CLOSE_ICON_Y = height_adjust(48)
+
+# "Click to continue" during black-screen white-text
+CLICK_TO_CONTINUE_X = width_adjust(856)
+CLICK_TO_CONTINUE_Y = height_adjust(968)
+
+CLICK_TO_CONTINUE_LOWER_X = width_adjust(960)
+CLICK_TO_CONTINUE_LOWER_Y = height_adjust(1026)
+
+# Black screen
+BLACK_SCREEN_LEFT_X = width_adjust(300)
+BLACK_SCREEN_RIGHT_X = width_adjust(1700)
+BLACK_SCREEN_Y = height_adjust(727)
 
 # Pixel coordinates near middle of the screen known to be white while the game is loading
 LOADING_SCREEN_X = width_adjust(1200)
@@ -136,10 +175,10 @@ def should_take_break() -> bool:
 
 def take_random_break() -> float:
     """
-    Take a random break between 3-8 seconds.
+    Take a random break between 1-4 seconds.
     :return: Duration of the break in seconds
     """
-    break_duration = uniform(3.0, 8.0)
+    break_duration = uniform(1.0, 4.0)
     print(f"  Taking a {break_duration:.1f}s break...")
     return break_duration
 
@@ -153,6 +192,15 @@ class MainStatus:
 
 main_status = MainStatus()
 
+last_log = ""
+
+
+def log_once(message: str) -> None:
+    """Print a message only if it's different from the last logged message."""
+    global last_log
+    if message != last_log:
+        print(message)
+        last_log = message
 
 def on_press(key: Union[Key, KeyCode, None]) -> None:
     """
@@ -198,8 +246,7 @@ def main() -> None:
     def is_dialogue_playing() -> bool:
         """Check if dialogue is currently playing (autoplay button visible)."""
         try:
-            current_pixel = pixel(PLAYING_ICON_X, PLAYING_ICON_Y)
-            return bool(current_pixel == (236, 229, 216))
+            return pixelMatchesColor(PLAYING_ICON_X, PLAYING_ICON_Y, (236, 229, 216), tolerance=5)
         except Exception:
             return False
 
@@ -207,16 +254,56 @@ def main() -> None:
         """Check if dialogue options are available."""
         try:
             # Confirm loading screen is not white
-            if pixel(LOADING_SCREEN_X, LOADING_SCREEN_Y) == (255, 255, 255):
+            if pixelMatchesColor(LOADING_SCREEN_X, LOADING_SCREEN_Y, (255, 255, 255)):
+                log_once("- Stop | Loading screen")
                 return False
 
-            # Check if lower dialogue icon pixel is white
-            if pixel(DIALOGUE_ICON_X, DIALOGUE_ICON_LOWER_Y) == (255, 255, 255):
-                return True
+            # Check for back icon (menu screen)
+            if pixelMatchesColor(TOP_LEFT_BACK_ICON_X, TOP_LEFT_BACK_ICON_Y, (59, 66, 85), tolerance=5):
+                log_once("- Stop | Top-left BACK icon")
+                return False
+
+            # Check for close icon (menu screen)
+            if pixelMatchesColor(TOP_RIGHT_CLOSE_ICON_X, TOP_RIGHT_CLOSE_ICON_Y, (59, 66, 85), tolerance=5):
+                log_once("- Stop | Top-right CLOSE icon")
+                return False
 
             # Check if higher dialogue icon pixel is white
-            if pixel(DIALOGUE_ICON_X, DIALOGUE_ICON_HIGHER_Y) == (255, 255, 255):
+            if pixelMatchesColor(DIALOGUE_ICON_X, DIALOGUE_ICON_HIGHER_Y, (255, 255, 255), tolerance=5):
+                log_once("> Choice (higher)")
                 return True
+
+            # Check if lower dialogue icon pixel is white
+            if pixelMatchesColor(DIALOGUE_ICON_X, DIALOGUE_ICON_LOWER_Y, (255, 255, 255), tolerance=5):
+                log_once("> Choice (lower)")
+                return True
+
+            # Check if "Click to continue" pixel is yellow (black-screen white-text)
+            if pixelMatchesColor(CLICK_TO_CONTINUE_X, CLICK_TO_CONTINUE_Y, (255, 190, 0), tolerance=5) and \
+                pixelMatchesColor(BLACK_SCREEN_LEFT_X, BLACK_SCREEN_Y, (0, 0, 0)) and \
+                pixelMatchesColor(BLACK_SCREEN_RIGHT_X, BLACK_SCREEN_Y, (0, 0, 0)):
+                log_once("> Click to continue (bottom yellow + black screen)")
+                return True
+                
+            if pixelMatchesColor(CLICK_TO_CONTINUE_LOWER_X, CLICK_TO_CONTINUE_LOWER_Y, (255, 190, 0), tolerance=5):
+                log_once("> Click to continue (bottom yellow)")
+                return True
+
+            return False
+        except Exception:
+            return False
+
+    def dialogue_should_esc() -> bool:
+        """Check if ESC should be pressed (readable content screens)."""
+        try:
+            # Top left Book is yellow and top right X icon pixel is gray
+            if pixelMatchesColor(READABLE_CONTENT_X, READABLE_CONTENT_Y, (164, 146, 111), tolerance=5) or \
+               pixelMatchesColor(READABLE_CONTENT_BOTTOM_X, READABLE_CONTENT_BOTTOM_Y, (79, 74, 65), tolerance=5):
+
+                if pixelMatchesColor(TOP_RIGHT_CLOSE_ICON_X, TOP_RIGHT_CLOSE_ICON_Y, (161, 144, 109), tolerance=5) or \
+                   pixelMatchesColor(TOP_RIGHT_CLOSE_ICON_X, TOP_RIGHT_CLOSE_ICON_Y, (211, 188, 142)):
+                    log_once("> ESC (full-screen readable content)")
+                    return True
 
             return False
         except Exception:
@@ -256,6 +343,15 @@ def main() -> None:
         # Only proceed if Genshin Impact is active
         if not is_genshin_impact_active():
             sleep(0.5)
+            continue
+
+        # Check if ESC should be pressed for readable content
+        if dialogue_should_esc() and random_f_key_interval() < 0.12:
+            try:
+                press("esc")
+            except Exception as e:
+                print(f"\n  Error pressing ESC key: {e}")
+            sleep(0.1)
             continue
 
         # Check if dialogue is active (either playing or options available)
